@@ -93,11 +93,14 @@ class PiBossAgent:
         except:
             return "Unable to parse script for docstring"
 
-    def run(self, single_run=False):
+    def run(self, single_run=False, initial_prompt=None):
         print(self.tools)
         while True:
             try:
-                if single_run:
+                if initial_prompt:
+                    user_input = initial_prompt
+                    initial_prompt = None  # Clear it after first use
+                elif single_run:
                     user_input = input("How can I help you today? ")
                     logging.info(f"User input: {user_input}")
                     response = self.process_request(user_input, single_run)
@@ -115,11 +118,11 @@ class PiBossAgent:
                         print("Tools reloaded successfully.")
                         print(self.tools)
                         continue
-                    
-                    response = self.process_request(user_input)
-                    print("\n")
-                    print(response)
-                    logging.info(f"Response to user: {response}")
+                
+                response = self.process_request(user_input)
+                print("\n")
+                print(response)
+                logging.info(f"Response to user: {response}")
             except KeyboardInterrupt:
                 print("\nExecution interrupted. Stopping any ongoing processes...")
                 logging.warning("Execution interrupted by user.")
@@ -259,7 +262,8 @@ class PiBossAgent:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PiBoss Agent")
     parser.add_argument("--single", action="store_true", help="Run the agent once and exit")
+    parser.add_argument("prompt", nargs="?", help="Initial prompt for the agent")
     args = parser.parse_args()
 
     agent = PiBossAgent()
-    agent.run(single_run=args.single)
+    agent.run(single_run=args.single, initial_prompt=args.prompt)
