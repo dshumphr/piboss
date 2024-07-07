@@ -142,7 +142,7 @@ class PiBossAgent:
                       "Always assume commands are available via name-based alias. Example: 'regen_image.sh [text]'"
                       "\n\n")
         
-        if not single_run:
+        if True:
             system_msg += ("<target> tags to specify whether the tool's result should be returned to the user "
                            "or the LLM (options: 'user' or 'llm'). ")
 
@@ -152,7 +152,7 @@ class PiBossAgent:
                                          f"and why."}
         ]
 
-        if not single_run:
+        if True:
             messages[0]["content"] += " Also specify whether the result should be returned to the user or processed by the LLM."
 
         while True:
@@ -169,7 +169,7 @@ class PiBossAgent:
             
             thought = self.extract_tag_content(ai_response, "thought")
             tool = self.extract_tag_content(ai_response, "tool")
-            target = self.extract_tag_content(ai_response, "target") if not single_run else "user"
+            target = self.extract_tag_content(ai_response, "target")
             response_text = self.extract_tag_content(ai_response, "response")
             clarification = self.extract_tag_content(ai_response, "clarification")
             
@@ -201,7 +201,7 @@ class PiBossAgent:
                             messages=[{"role": "user", "content": tool_info['content']}]
                         ).content[0].text
                     logging.debug(f"Tool result: {tool_result}")
-                    if target == "user" or single_run:
+                    if target == "user":
                         return f"Thought: {thought}\nTool used: {tool}\nTool result: {tool_result}\nResponse: {response_text}"
                     elif target == "llm":
                         messages.append({"role": "user", "content": f"<tool_result>{tool_result}</tool_result>"})
@@ -211,7 +211,7 @@ class PiBossAgent:
                         logging.info(f"Executing command: {tool}")
                         tool_result = subprocess.check_output(tool, shell=True, text=True, stderr=subprocess.STDOUT)
                         logging.debug(f"Command result: {tool_result}")
-                        if target == "user" or single_run:
+                        if target == "user":
                             return f"Thought: {thought}\nCommand used: {tool}\nCommand result: {tool_result}\nResponse: {response_text}"
                         elif target == "llm":
                             messages.append({"role": "user", "content": f"<tool_result>{tool_result}</tool_result>"})
