@@ -100,14 +100,6 @@ class PiBossAgent:
                 if initial_prompt:
                     user_input = initial_prompt
                     initial_prompt = None  # Clear it after first use
-                elif single_run:
-                    user_input = input("How can I help you today? ")
-                    logging.info(f"User input: {user_input}")
-                    response = self.process_request(user_input, single_run)
-                    print("\n")
-                    print(response)
-                    logging.info(f"Response to user: {response}")
-                    break
                 else:
                     user_input = input("How can I help you today? ")
                     logging.info(f"User input: {user_input}")
@@ -123,6 +115,8 @@ class PiBossAgent:
                 print("\n")
                 print(response)
                 logging.info(f"Response to user: {response}")
+                if single_run:
+                    break
             except KeyboardInterrupt:
                 print("\nExecution interrupted. Stopping any ongoing processes...")
                 logging.warning("Execution interrupted by user.")
