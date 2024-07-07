@@ -142,6 +142,7 @@ class PiBossAgent:
                       "a single Linux command in the usual ways (eg. piping). Tools include common Linux commands "
                       f"and the following tools:\n<tools>{tool_help_info}</tools>"
                       "If necessary (ie other tools don't cover this for you), display images via 'sudo fbi -T 1 -noverbose -a'"
+                      "Always assume commands are available via name-based alias. Example: 'regen_image.sh [text]'"
                       "\n\n")
         
         if not single_run:
