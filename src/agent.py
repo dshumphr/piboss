@@ -6,6 +6,7 @@ import json
 import logging
 import sys
 import argparse
+import random
 
 class PiBossAgent:
     def __init__(self):
@@ -13,7 +14,12 @@ class PiBossAgent:
         self.tools_cache_file = os.path.expanduser("~/pi_boss/tools_cache.json")
         self.tools = self.load_tools()
         
-        logging.getLogger().setLevel(logging.INFO)
+        logging.basicConfig(level=logging.INFO,
+                            format='%(asctime)s - %(levelname)s - %(message)s',
+                            handlers=[
+                                logging.FileHandler("pi_boss_conversations.log"),
+                                logging.StreamHandler()
+                            ])
         
     def load_tools(self, force=False) -> Dict[str, callable]:
         logging.info("Loading tools...")
@@ -31,9 +37,7 @@ class PiBossAgent:
         
         # Load custom scripts
         script_dir = os.path.expanduser("~/pi_boss/scripts")
-        print(script_dir)
         for filename in os.listdir(script_dir):
-            print(filename)
             if filename.endswith((".py", ".sh")):
                 module_name = filename[:-3]
                 script_path = os.path.join(script_dir, filename)
@@ -94,7 +98,6 @@ class PiBossAgent:
             return "Unable to parse script for docstring"
 
     def run(self, single_run=False, initial_prompt=None):
-        print(self.tools)
         while True:
             try:
                 if initial_prompt:
@@ -108,7 +111,6 @@ class PiBossAgent:
                     elif user_input.lower() == "reload tools":
                         self.tools = self.load_tools(True)
                         print("Tools reloaded successfully.")
-                        print(self.tools)
                         continue
                 
                 response = self.process_request(user_input)
@@ -123,43 +125,30 @@ class PiBossAgent:
                 # Add logic here to stop any ongoing processes if needed
                 break
 
-    def process_request(self, user_input: str, single_run=False) -> str:
+    def process_request(self, user_input: str) -> str:
         logging.info(f"Processing request: {user_input}")
         tool_help_info = "\n".join([f"{name}: {info['help']}" for name, info in self.tools.items()])
         system_msg = ("You are an AI assistant that helps process user requests on a Raspbian system. "
+                      "You may either respond directly or return a command to run, depending on which will provide a better user experience. "
                       "The requests typically revolve around ai art creation and display. "
-                      "Note that images and prompts are generally stored in ~/drawings/main/ as follows: "
-                      "  Images: [timestamp].png"
-                      "  Prompt (useful for repeating command): [timestamp].txt"
-                      "  Reprompt (mainly just used for debugging): [timestamp]_reprompt.txt"
                       "Please structure your responses using XML tags. Use <thought> tags for your reasoning, "
-                      "<tool> tags to specify a tool/command to use (if needed), "
-                      "<response> tags for the final response to the user. If anything is unclear, use "
-                      "<clarification> tags to ask the user for more information. Multiple tools can be composed "
+                      "<tool> tags if you specify a tool/command to use, or "
+                      "<response> tags if you want to respond to the user. Multiple tools can be composed "
                       "a single Linux command in the usual ways (eg. piping). Tools include common Linux commands "
                       f"and the following tools:\n<tools>{tool_help_info}</tools>"
-                      "If necessary (ie other tools don't cover this for you), display images via 'sudo fbi -T 1 -noverbose -a'"
-                      "Always assume commands are available via name-based alias. Example: 'regen_image.sh [text]'"
+                      "Always start by explaining common missteps someone might make in attempting the task in <thought> tags."
                       "\n\n")
         
-        if True:
-            system_msg += ("<target> tags to specify whether the tool's result should be returned to the user "
-                           "or the LLM (options: 'user' or 'llm'). ")
-
         messages = [
             {"role": "user", "content": f"<request>{user_input}</request>\n\n"
-                                         f"How should I approach this request? If a tool is needed, specify which one, "
-                                         f"and why."}
+                                         f"How should I approach this request?"}
         ]
-
-        if True:
-            messages[0]["content"] += " Also specify whether the result should be returned to the user or processed by the LLM."
 
         while True:
             logging.debug(f"Sending request to LLM with messages: {messages}")
             response = self.client.messages.create(
                 model="claude-3-5-sonnet-20240620", # Note: DO NOT CHANGE THE MODEL STRING
-                max_tokens=3000,
+                max_tokens=4000,
                 messages=messages,
                 system=system_msg,
             )
@@ -169,27 +158,16 @@ class PiBossAgent:
             
             thought = self.extract_tag_content(ai_response, "thought")
             tool = self.extract_tag_content(ai_response, "tool")
-            target = self.extract_tag_content(ai_response, "target")
             response_text = self.extract_tag_content(ai_response, "response")
-            clarification = self.extract_tag_content(ai_response, "clarification")
             
-            logging.info(f"Extracted - Thought: {thought}, Tool: {tool}, Target: {target}, Response: {response_text}, Clarification: {clarification}")
-            messages.append({"role": "assistant", "content": ai_response})
+            logging.info(f"Extracted - Thought: {thought}, Tool: {tool}, Response: {response_text}")
             
-            if clarification:
-                user_clarification = input(f"{clarification} ")
-                logging.info(f"User clarification: {user_clarification}")
-                messages.append({"role": "user", "content": f"<clarification>{user_clarification}</clarification>"})
-                continue
-
             if tool:
-                print(tool)
                 tool_name = tool.split()[0]
                 tool_args = ' '.join(tool.split()[1:])
                 if tool_name in self.tools:
                     logging.info(f"Executing tool: {tool_name}")
                     tool_info = self.tools[tool_name]
-                    print(tool_info)
                     if tool_info["type"] == "python_script":
                         tool_result = subprocess.check_output(f"python3 {tool_info['path']} {tool_args}", shell=True, text=True)
                     elif tool_info["type"] == "bash_script":
@@ -201,21 +179,13 @@ class PiBossAgent:
                             messages=[{"role": "user", "content": tool_info['content']}]
                         ).content[0].text
                     logging.debug(f"Tool result: {tool_result}")
-                    if target == "user":
-                        return f"Thought: {thought}\nTool used: {tool}\nTool result: {tool_result}\nResponse: {response_text}"
-                    elif target == "llm":
-                        messages.append({"role": "user", "content": f"<tool_result>{tool_result}</tool_result>"})
-                        continue
+                    return f"Thought: {thought}\nTool used: {tool}\nTool result: {tool_result}\nResponse: {response_text}"
                 else:
                     try:
                         logging.info(f"Executing command: {tool}")
                         tool_result = subprocess.check_output(tool, shell=True, text=True, stderr=subprocess.STDOUT)
                         logging.debug(f"Command result: {tool_result}")
-                        if target == "user":
-                            return f"Thought: {thought}\nCommand used: {tool}\nCommand result: {tool_result}\nResponse: {response_text}"
-                        elif target == "llm":
-                            messages.append({"role": "user", "content": f"<tool_result>{tool_result}</tool_result>"})
-                            continue
+                        return f"Thought: {thought}\nCommand used: {tool}\nCommand result: {tool_result}\nResponse: {response_text}"
                     except subprocess.CalledProcessError as e:
                         error_msg = f"Error: Command '{tool}' failed with error: {e.output}"
                         logging.error(error_msg)
@@ -253,11 +223,49 @@ class PiBossAgent:
         logging.info(success_msg)
         return success_msg
 
+    def record_common_tasks(self, num_tasks=10):
+        common_tasks = [
+            "Paint a cyberpunk pyramid",
+            "Draw an animal",
+            "Create an oil painting",
+            "Paint something lame",
+            "Draw something badass",
+            "Make a slideshow of cyberpunk architecture",
+            "Show the dog image from last week",
+            "Generate a surreal landscape",
+            "Create a digital portrait",
+            "Design a futuristic city skyline",
+            "Illustrate a fantasy creature",
+            "Compose an abstract artwork",
+            "Sketch a vintage car",
+            "Paint a post-apocalyptic scene",
+            "Draw a steampunk invention"
+        ]
+
+        responses = []
+        for _ in range(num_tasks):
+            task = random.choice(common_tasks)
+            logging.info(f"Recording response for task: {task}")
+            response = self.process_request(task)
+            responses.append({"task": task, "response": response})
+
+        with open("common_tasks_responses.json", "w") as f:
+            json.dump(responses, f, indent=2)
+
+        logging.info(f"Recorded responses for {num_tasks} common tasks.")
+        return f"Recorded responses for {num_tasks} common tasks. Results saved in common_tasks_responses.json"
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PiBoss Agent")
     parser.add_argument("--single", action="store_true", help="Run the agent once and exit")
+    parser.add_argument("--record-tasks", type=int, metavar="N", help="Record responses for N common tasks")
     parser.add_argument("prompt", nargs="?", help="Initial prompt for the agent")
     args = parser.parse_args()
 
     agent = PiBossAgent()
-    agent.run(single_run=args.single, initial_prompt=args.prompt)
+
+    if args.record_tasks:
+        result = agent.record_common_tasks(args.record_tasks)
+        print(result)
+    else:
+        agent.run(single_run=args.single, initial_prompt=args.prompt)
