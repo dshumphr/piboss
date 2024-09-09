@@ -137,7 +137,12 @@ class PiBossAgent:
                       "a single Linux command in the usual ways (eg. piping). Tools include common Linux commands "
                       f"and the following tools:\n<tools>{tool_help_info}</tools>"
                       "Always start by explaining common missteps someone might make in attempting the task in <thought> tags."
-                      "\n\n")
+                      "\n\n"
+                      "Example:\n"
+                      "User: Paint a bear\n"
+                      "Assistant: <thought>When asked to paint a bear, a common mistake would be to assume we need to manually use a painting program. Instead, we can use AI-powered image generation.</thought>\n"
+                      "<tool>./regen_image.sh 'A realistic painting of a grizzly bear in a forest'</tool>\n"
+                      "<response>I've used our AI image generation tool to create a painting of a bear for you. The image should be displayed on the screen shortly. Let me know if you'd like any changes or have any other requests!</response>")
         
         messages = [
             {"role": "user", "content": f"<request>{user_input}</request>\n\n"
